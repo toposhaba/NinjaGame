@@ -301,7 +301,7 @@ function makeBounceBeam() {
     mesh: group,
     plank,
     springs,
-    minZ: 10, maxZ: 30, halfW: 0.75, baseY: 0, amp: 0.4, period: 2.2,
+    minZ: 10, maxZ: 30, halfW: 0.75, baseY: 0.55, amp: 0.35, period: 2.2,
   };
 }
 const beam = makeBounceBeam();
@@ -876,19 +876,36 @@ function update(dt) {
     const pos = meterPos(meterT);
     arrowEl.style.left = (pos * 100) + '%';
 
+    const ropeLen = 1.85;
+    const hx = barPivot.position.x;
+    const hy = barPivot.position.y - Math.cos(ang) * ropeLen;
+    const hz = barPivot.position.z - Math.sin(ang) * ropeLen;
+    player.x = hx;
+    player.y = hy - 1.2;
+    player.z = hz;
+    if (playerMesh.root.parent !== scene) {
+      hangHold.remove(playerMesh.root);
+      scene.add(playerMesh.root);
+    }
+    playerMesh.root.visible = true;
+    playerMesh.root.position.set(player.x, player.y, player.z);
+    playerMesh.root.rotation.set(ang * 0.35 + 0.15, 0, 0);
+    playerMesh.armL.rotation.z = 2.4;
+    playerMesh.armR.rotation.z = -2.4;
+    playerMesh.armL.position.set(-0.2, 1.35, 0.1);
+    playerMesh.armR.position.set(0.2, 1.35, 0.1);
+
     if (spaceEdge) {
       spaceEdge = false;
       const perfect = Math.abs(pos - 0.5) <= PERFECT_WINDOW;
       const launchAng = perfect ? 0.5 : ang;
       barPivot.rotation.x = launchAng;
-      hangHold.updateWorldMatrix(true, false);
-      const wp = new THREE.Vector3();
-      hangHold.getWorldPosition(wp);
-      hangHold.remove(playerMesh.root);
-      scene.add(playerMesh.root);
-      player.x = wp.x;
-      player.y = Math.max(0.4, wp.y - 0.15);
-      player.z = wp.z;
+      const lx = barPivot.position.x;
+      const ly = barPivot.position.y - Math.cos(launchAng) * ropeLen;
+      const lz = barPivot.position.z - Math.sin(launchAng) * ropeLen;
+      player.x = lx;
+      player.y = Math.max(0.4, ly - 0.5);
+      player.z = lz;
       playerMesh.root.position.set(player.x, player.y, player.z);
       playerMesh.root.rotation.set(0, 0, 0);
       playerMesh.armL.rotation.set(0, 0, 0);
@@ -979,18 +996,16 @@ function update(dt) {
       meterT = 0;
       meterEl.style.display = 'block';
       player.vx = player.vy = player.vz = 0;
-      scene.remove(playerMesh.root);
-      hangHold.add(playerMesh.root);
+      if (playerMesh.root.parent !== scene) {
+        hangHold.remove(playerMesh.root);
+        scene.add(playerMesh.root);
+      }
       playerMesh.root.visible = true;
-      playerMesh.root.frustumCulled = false;
       playerMesh.root.traverse((o) => { o.frustumCulled = false; o.visible = true; });
-      playerMesh.root.position.set(0, -1.35, 0);
-      playerMesh.root.rotation.set(0.2, 0, 0);
       playerMesh.armL.rotation.z = 2.4;
       playerMesh.armR.rotation.z = -2.4;
       playerMesh.armL.position.set(-0.2, 1.35, 0.1);
       playerMesh.armR.position.set(0.2, 1.35, 0.1);
-      hangHold.updateMatrixWorld(true);
     }
 
     if (player.x > flagHit.minX && player.x < flagHit.maxX &&
@@ -1012,17 +1027,11 @@ function update(dt) {
 
 const camPos = new THREE.Vector3(0, 5, -4);
 const camTarget = new THREE.Vector3();
-const _hangWorld = new THREE.Vector3();
 function updateCamera(dt) {
-  let focus;
-  if (state === 'SWINGING') {
-    hangHold.getWorldPosition(_hangWorld);
-    focus = _hangWorld.clone();
-    focus.y -= 0.4;
-  } else {
-    focus = new THREE.Vector3(player.x, player.y + 1.2, player.z);
-  }
-  const desired = focus.clone().add(new THREE.Vector3(0, 3.6, -9.2));
+  const focus = state === 'SWINGING'
+    ? new THREE.Vector3(player.x, player.y + 1.0, player.z)
+    : new THREE.Vector3(player.x, player.y + 1.2, player.z);
+  const desired = focus.clone().add(new THREE.Vector3(0, 3.8, -9.5));
   camPos.lerp(desired, 1 - Math.pow(0.001, dt));
   camTarget.lerp(focus, 1 - Math.pow(0.001, dt));
   camera.position.copy(camPos);
