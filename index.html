@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bunny Ninja</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #2a1a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fredoka', sans-serif;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    background: #ffeef8;
+    max-width: 100vw;
+    max-height: 100vh;
+    image-rendering: pixelated;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="540"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 960, H = 540;
+
+const COLORS = {
+  bg: '#ffeef8',
+  platform: '#c9b6e4',
+  platformEdge: '#a88fd0',
+  goo: '#ff4d6d',
+  gooDark: '#e02f52',
+  skin: '#ffe0cc',
+  overalls: '#ffb3d1',
+  overallsDark: '#f48fb1',
+  mask: '#c2185b',
+  headband: '#ad1457',
+  ear: '#ffffff',
+  earInner: '#ffb3d1',
+  beam: '#8d6e63',
+  bar: '#5d4037',
+  green: '#43a047',
+  gray: '#757575',
+  flag: '#ff8a65',
+  text: '#5a2a4a',
+};
+
+const GRAVITY = 2000;
+const MOVE_SPEED = 260;
+const JUMP_V = -800;
+const HIT_W = 24, HIT_H = 48;
+const ROPE_LEN = 130;
+const SWING_AMP = 75 * Math.PI / 180;
+const SWING_SPEED = 2.5;
+const METER_PERIOD = 1.6;
+const PERFECT_WINDOW = 0.1;
+const WIN_VX = 820, WIN_VY = -700;
+const FAIL_VX = 140, FAIL_VY = -180;
+
+const keys = {};
+let spacePressed = false;
+let rPressed = false;
+
+window.addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+  if (e.code === 'Space' || e.code === 'ArrowUp') e.preventDefault();
+  if (e.code === 'Space') spacePressed = true;
+  if (e.code === 'KeyR') rPressed = true;
+});
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+let state = 'MENU';
+let deaths = 0;
+let time = 0;
+let deadTimer = 0;
+let winTimer = 0;
+let facing = 1;
+let walkPhase = 0;
+let meterT = 0;
+let confetti = [];
+let petals = [];
+let clouds = [];
+
+const player = {
+  x: 80,
+  y: 450 - HIT_H,
+  vx: 0,
+  vy: 0,
+  onGround: false,
+  ridingBeam: false,
+};
+
+const staticPlatforms = [
+  { x: 0, y: 450, w: 300, h: 90 },
+  { x: 1040, y: 450, w: 260, h: 90 },
+  { x: 1950, y: 450, w: 280, h: 90 },
+];
+
+const beam = { x: 340, w: 660, h: 14, baseY: 430, amp: 25, period: 2 };
+const bar = { x: 1380, y: 290, w: 56, h: 10 };
+const flag = { x: 2080, y: 360, w: 18, h: 90 };
+const dojo = { x: 2000, y: 370, w: 140, h: 80 };
+const gooZones = [
+  { x: 300, y: 500, w: 740, h: 80 },
+  { x: 1300, y: 500, w: 650, h: 80 },
+];
+
+function beamY(t) {
+  return beam.baseY + Math.sin((t / beam.period) * Math.PI * 2) * beam.amp;
+}
+
+function meterPos(t) {
+  const cycle = (t % METER_PERIOD) / METER_PERIOD;
+  return cycle < 0.5 ? cycle * 2 : 2 - cycle * 2;
+}
+
+function resetPlayer() {
+  player.x = 80;
+  player.y = 450 - HIT_H;
+  player.vx = 0;
+  player.vy = 0;
+  player.onGround = true;
+  player.ridingBeam = false;
+  facing = 1;
+}
+
+function startGame() {
+  deaths = 0;
+  resetPlayer();
+  state = 'PLAYING';
+  confetti = [];
+  meterT = 0;
+}
+
+function kill() {
+  if (state === 'DEAD' || state === 'WIN') return;
+  deaths++;
+  state = 'DEAD';
+  deadTimer = 0.6;
+  player.vx = 0;
+  player.vy = 0;
+}
+
+function win() {
+  state = 'WIN';
+  winTimer = 0;
+  confetti = [];
+  for (let i = 0; i < 60; i++) {
+    confetti.push({
+      x: Math.random() * W,
+      y: -Math.random() * H,
+      vx: (Math.random() - 0.5) * 120,
+      vy: 80 + Math.random() * 160,
+      c: ['#ffb3d1', '#81d4fa', '#ffe082', '#a5d6a7', '#ce93d8'][i % 5],
+      s: 6 + Math.random() * 8,
+    });
+  }
+}
+
+function initDecor() {
+  clouds = [];
+  for (let i = 0; i < 8; i++) {
+    clouds.push({
+      x: Math.random() * 2400,
+      y: 40 + Math.random() * 120,
+      s: 0.6 + Math.random() * 0.8,
+      sp: 8 + Math.random() * 12,
+    });
+  }
+  petals = [];
+  for (let i = 0; i < 24; i++) {
+    petals.push({
+      x: Math.random() * 2400,
+      y: Math.random() * H,
+      r: 3 + Math.random() * 3,
+      sp: 20 + Math.random() * 30,
+      sway: Math.random() * Math.PI * 2,
+    });
+  }
+}
+initDecor();
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function playerRect() {
+  return { x: player.x, y: player.y, w: HIT_W, h: HIT_H };
+}
+
+function update(dt) {
+  time += dt;
+
+  if (state === 'MENU') {
+    if (spacePressed) {
+      spacePressed = false;
+      startGame();
+    }
+    updateDecor(dt);
+    return;
+  }
+
+  if (state === 'WIN') {
+    winTimer += dt;
+    for (const c of confetti) {
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      if (c.y > H + 20) c.y = -10;
+    }
+    if (rPressed) {
+      rPressed = false;
+      state = 'MENU';
+    }
+    updateDecor(dt);
+    return;
+  }
+
+  if (state === 'DEAD') {
+    deadTimer -= dt;
+    if (deadTimer <= 0) {
+      resetPlayer();
+      state = 'PLAYING';
+    }
+    updateDecor(dt);
+    spacePressed = false;
+    return;
+  }
+
+  if (state === 'SWINGING') {
+    meterT += dt;
+    const angle = Math.sin(time * SWING_SPEED) * SWING_AMP;
+    player.x = bar.x + bar.w / 2 + Math.sin(angle) * ROPE_LEN - HIT_W / 2;
+    player.y = bar.y + Math.cos(angle) * ROPE_LEN;
+    player.vx = 0;
+    player.vy = 0;
+    facing = Math.sin(angle) >= 0 ? 1 : -1;
+
+    if (spacePressed) {
+      spacePressed = false;
+      const pos = meterPos(meterT);
+      const perfect = Math.abs(pos - 0.5) <= PERFECT_WINDOW;
+      state = 'PLAYING';
+      if (perfect) {
+        player.vx = WIN_VX;
+        player.vy = WIN_VY;
+      } else {
+        player.vx = FAIL_VX;
+        player.vy = FAIL_VY;
+      }
+      player.onGround = false;
+    }
+    updateDecor(dt);
+    return;
+  }
+
+  if (state === 'PLAYING') {
+    const left = keys['ArrowLeft'] || keys['KeyA'];
+    const right = keys['ArrowRight'] || keys['KeyD'];
+    const jump = keys['Space'] || keys['ArrowUp'] || keys['KeyW'];
+
+    if (left) { player.vx = -MOVE_SPEED; facing = -1; }
+    else if (right) { player.vx = MOVE_SPEED; facing = 1; }
+    else player.vx = 0;
+
+    if (jump && player.onGround) {
+      player.vy = JUMP_V;
+      player.onGround = false;
+      player.ridingBeam = false;
+      spacePressed = false;
+    } else {
+      spacePressed = false;
+    }
+
+    player.vy += GRAVITY * dt;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    if (Math.abs(player.vx) > 10 && player.onGround) walkPhase += dt * 10;
+    else walkPhase = 0;
+
+    player.onGround = false;
+    player.ridingBeam = false;
+
+    const by = beamY(time);
+    const beamPlat = { x: beam.x, y: by, w: beam.w, h: beam.h };
+    const pr = playerRect();
+
+    if (player.vy >= 0 &&
+        pr.x + pr.w > beamPlat.x && pr.x < beamPlat.x + beamPlat.w &&
+        pr.y + pr.h >= beamPlat.y && pr.y + pr.h <= beamPlat.y + beamPlat.h + 16 &&
+        player.y + HIT_H - player.vy * dt <= beamPlat.y + 4) {
+      player.y = beamPlat.y - HIT_H;
+      player.vy = 0;
+      player.onGround = true;
+      player.ridingBeam = true;
+      const nextBy = beamY(time + dt);
+      player.y += (nextBy - by);
+    }
+
+    for (const p of staticPlatforms) {
+      const pr2 = playerRect();
+      if (player.vy >= 0 &&
+          pr2.x + pr2.w > p.x && pr2.x < p.x + p.w &&
+          pr2.y + pr2.h >= p.y && pr2.y + pr2.h <= p.y + 18 &&
+          player.y + HIT_H - player.vy * dt <= p.y + 4) {
+        player.y = p.y - HIT_H;
+        player.vy = 0;
+        player.onGround = true;
+      }
+    }
+
+    if (player.x < 0) player.x = 0;
+    if (player.x + HIT_W > 2400) player.x = 2400 - HIT_W;
+
+    for (const g of gooZones) {
+      if (rectsOverlap(playerRect(), g)) {
+        kill();
+        break;
+      }
+    }
+    if (player.y > H + 40) kill();
+
+    const grab = {
+      x: player.x - 6,
+      y: player.y - 8,
+      w: HIT_W + 12,
+      h: 28,
+    };
+    const barGrab = { x: bar.x - 8, y: bar.y - 8, w: bar.w + 16, h: bar.h + 16 };
+    if (!player.onGround && player.vy <= 120 && rectsOverlap(grab, barGrab)) {
+      state = 'SWINGING';
+      meterT = 0;
+      player.vx = 0;
+      player.vy = 0;
+    }
+
+    const flagBox = { x: flag.x - 10, y: flag.y, w: 50, h: flag.h };
+    if (rectsOverlap(playerRect(), flagBox)) win();
+  }
+
+  updateDecor(dt);
+}
+
+function updateDecor(dt) {
+  for (const c of clouds) {
+    c.x += c.sp * dt;
+    if (c.x > 2500) c.x = -120;
+  }
+  for (const p of petals) {
+    p.y += p.sp * dt;
+    p.x += Math.sin(time * 2 + p.sway) * 20 * dt;
+    if (p.y > H + 10) {
+      p.y = -10;
+      p.x = Math.random() * 2400;
+    }
+  }
+}
+
+function camX() {
+  if (state === 'MENU') return 0;
+  return Math.max(0, Math.min(2400 - W, player.x + HIT_W / 2 - W / 2));
+}
+
+function drawCloud(c, cam) {
+  const x = c.x - cam;
+  const y = c.y;
+  const s = c.s;
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 40 * s, 18 * s, 0, 0, Math.PI * 2);
+  ctx.ellipse(x - 28 * s, y + 4, 24 * s, 14 * s, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + 28 * s, y + 4, 24 * s, 14 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawPetal(p, cam) {
+  const x = p.x - cam;
+  ctx.fillStyle = 'rgba(255,179,209,0.85)';
+  ctx.beginPath();
+  ctx.ellipse(x, p.y, p.r, p.r * 0.6, time + p.sway, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawGoo(g, cam) {
+  const x = g.x - cam;
+  ctx.fillStyle = COLORS.goo;
+  ctx.beginPath();
+  ctx.moveTo(x, g.y + 10);
+  for (let i = 0; i <= g.w; i += 12) {
+    const wave = Math.sin(time * 3 + i * 0.08) * 6;
+    ctx.lineTo(x + i, g.y + wave);
+  }
+  ctx.lineTo(x + g.w, H);
+  ctx.lineTo(x, H);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = COLORS.gooDark;
+  for (let i = 20; i < g.w; i += 40) {
+    const bx = x + i + Math.sin(time * 2 + i) * 4;
+    const by = g.y + 18 + Math.sin(time * 3 + i) * 3;
+    ctx.beginPath();
+    ctx.arc(bx, by, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawPlatform(p, cam) {
+  const x = p.x - cam;
+  ctx.fillStyle = COLORS.platform;
+  ctx.fillRect(x, p.y, p.w, p.h);
+  ctx.fillStyle = COLORS.platformEdge;
+  ctx.fillRect(x, p.y, p.w, 8);
+  ctx.fillStyle = '#fff5';
+  for (let i = 10; i < p.w; i += 28) {
+    ctx.beginPath();
+    ctx.arc(x + i, p.y + 4, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBeam(cam) {
+  const y = beamY(time);
+  const x = beam.x - cam;
+  ctx.fillStyle = COLORS.beam;
+  ctx.fillRect(x, y, beam.w, beam.h);
+  ctx.fillStyle = '#a1887f';
+  ctx.fillRect(x, y, beam.w, 4);
+  ctx.strokeStyle = '#6d4c41';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < beam.w; i += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y);
+    ctx.lineTo(x + i, y + beam.h);
+    ctx.stroke();
+  }
+}
+
+function drawBar(cam) {
+  const x = bar.x - cam;
+  ctx.strokeStyle = '#90a4ae';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x + bar.w / 2, 0);
+  ctx.lineTo(x + bar.w / 2, bar.y);
+  ctx.stroke();
+  ctx.fillStyle = COLORS.bar;
+  ctx.fillRect(x - 10, bar.y - 4, bar.w + 20, bar.h + 4);
+  ctx.fillStyle = '#8d6e63';
+  ctx.fillRect(x - 10, bar.y - 4, bar.w + 20, 3);
+}
+
+function drawDojo(cam) {
+  const x = dojo.x - cam;
+  const y = dojo.y;
+  ctx.fillStyle = '#8d6e63';
+  ctx.fillRect(x + 10, y + 20, 16, 60);
+  ctx.fillRect(x + dojo.w - 26, y + 20, 16, 60);
+  ctx.fillStyle = '#e57373';
+  ctx.beginPath();
+  ctx.moveTo(x, y + 24);
+  ctx.lineTo(x + dojo.w / 2, y);
+  ctx.lineTo(x + dojo.w, y + 24);
+  ctx.lineTo(x + dojo.w - 8, y + 32);
+  ctx.lineTo(x + 8, y + 32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#fff8';
+  ctx.fillRect(x + 40, y + 36, 60, 8);
+}
+
+function drawFlag(cam) {
+  const x = flag.x - cam;
+  ctx.fillStyle = '#795548';
+  ctx.fillRect(x, flag.y, 6, flag.h);
+  ctx.fillStyle = COLORS.flag;
+  const flutter = Math.sin(time * 4) * 4;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, flag.y);
+  ctx.lineTo(x + 48 + flutter, flag.y + 16);
+  ctx.lineTo(x + 6, flag.y + 32);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPlayer(cam) {
+  const px = player.x - cam + HIT_W / 2;
+  const py = player.y + HIT_H / 2;
+  const wobble = player.onGround && Math.abs(player.vx) > 10
+    ? Math.sin(walkPhase) * 0.08
+    : 0;
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(facing, 1);
+  ctx.rotate(wobble);
+
+  ctx.fillStyle = '#90a4ae';
+  ctx.fillRect(-18, -6, 8, 28);
+  ctx.fillStyle = '#cfd8dc';
+  ctx.fillRect(-16, -8, 4, 8);
+
+  ctx.fillStyle = COLORS.overalls;
+  ctx.fillRect(-10, -4, 20, 22);
+  ctx.fillStyle = COLORS.overallsDark;
+  ctx.fillRect(-10, 10, 8, 8);
+  ctx.fillRect(2, 10, 8, 8);
+  ctx.fillStyle = '#fff8';
+  ctx.fillRect(-6, -2, 4, 6);
+  ctx.fillRect(2, -2, 4, 6);
+
+  const legOff = Math.sin(walkPhase) * 4;
+  ctx.fillStyle = COLORS.overallsDark;
+  ctx.fillRect(-9, 18, 7, 10 + (player.onGround ? legOff : 0));
+  ctx.fillRect(2, 18, 7, 10 + (player.onGround ? -legOff : 0));
+  ctx.fillStyle = '#5d4037';
+  ctx.fillRect(-9, 26, 7, 4);
+  ctx.fillRect(2, 26, 7, 4);
+
+  ctx.fillStyle = COLORS.skin;
+  ctx.beginPath();
+  ctx.arc(0, -18, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = COLORS.ear;
+  ctx.fillRect(-11, -42, 7, 18);
+  ctx.fillRect(4, -42, 7, 18);
+  ctx.fillStyle = COLORS.earInner;
+  ctx.fillRect(-9, -38, 3, 10);
+  ctx.fillRect(6, -38, 3, 10);
+
+  ctx.fillStyle = COLORS.headband;
+  ctx.fillRect(-13, -26, 26, 6);
+  ctx.fillRect(11, -24, 10, 3);
+  ctx.fillRect(14, -20, 8, 3);
+
+  ctx.fillStyle = COLORS.mask;
+  ctx.beginPath();
+  ctx.ellipse(0, -14, 11, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.ellipse(-4, -18, 3.2, 3.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(4, -18, 3.2, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.beginPath();
+  ctx.arc(-4, -18, 1.4, 0, Math.PI * 2);
+  ctx.arc(4, -18, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  if (state === 'SWINGING') {
+    const angle = Math.sin(time * SWING_SPEED) * SWING_AMP;
+    const bx = bar.x - cam + bar.w / 2;
+    const by = bar.y;
+    ctx.strokeStyle = '#6d4c41';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(player.x - cam + HIT_W / 2, player.y);
+    ctx.stroke();
+  }
+}
+
+function drawMeter() {
+  const mw = 280, mh = 28;
+  const mx = (W - mw) / 2, my = 36;
+  ctx.fillStyle = 'rgba(90,42,74,0.55)';
+  ctx.fillRect(mx - 8, my - 18, mw + 16, mh + 36);
+  ctx.fillStyle = '#fff';
+  ctx.font = '700 14px Fredoka, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Release when the arrow hits the green!', W / 2, my - 4);
+
+  ctx.fillStyle = '#eceff1';
+  ctx.fillRect(mx, my + 8, mw, 12);
+  ctx.strokeStyle = '#90a4ae';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(mx, my + 8, mw, 12);
+
+  const greenX = mx + mw * 0.5;
+  ctx.fillStyle = COLORS.green;
+  ctx.beginPath();
+  ctx.arc(greenX, my + 14, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#2e7d32';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const pos = meterPos(meterT);
+  const ax = mx + pos * mw;
+  ctx.fillStyle = COLORS.gray;
+  ctx.beginPath();
+  ctx.moveTo(ax, my + 2);
+  ctx.lineTo(ax - 8, my - 10);
+  ctx.lineTo(ax + 8, my - 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(ax - 2, my + 2, 4, 22);
+}
+
+function drawHUD() {
+  ctx.fillStyle = COLORS.text;
+  ctx.font = '700 18px Fredoka, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Deaths: ' + deaths, 16, 28);
+  ctx.font = '500 14px Fredoka, sans-serif';
+  ctx.fillText('Arrows/AD move · Space jump/release · R restart', 16, 48);
+}
+
+function drawMenu() {
+  ctx.fillStyle = 'rgba(255,238,248,0.82)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = COLORS.text;
+  ctx.font = '700 64px Fredoka, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Bunny Ninja', W / 2, 200);
+  ctx.font = '500 22px Fredoka, sans-serif';
+  ctx.fillText('A little bunny-eared ninja trains on the obstacle course.', W / 2, 250);
+  ctx.fillText('Cross the bounce beam. Swing the bar. Hit the green circle.', W / 2, 282);
+  const pulse = 0.7 + Math.sin(time * 3) * 0.3;
+  ctx.globalAlpha = pulse;
+  ctx.font = '700 28px Fredoka, sans-serif';
+  ctx.fillText('Press Space to start', W / 2, 360);
+  ctx.globalAlpha = 1;
+
+  ctx.save();
+  ctx.translate(W / 2, 440);
+  ctx.scale(2, 2);
+  drawPlayerAtOrigin();
+  ctx.restore();
+}
+
+function drawPlayerAtOrigin() {
+  ctx.fillStyle = COLORS.overalls;
+  ctx.fillRect(-10, -4, 20, 22);
+  ctx.fillStyle = COLORS.skin;
+  ctx.beginPath();
+  ctx.arc(0, -18, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = COLORS.ear;
+  ctx.fillRect(-11, -42, 7, 18);
+  ctx.fillRect(4, -42, 7, 18);
+  ctx.fillStyle = COLORS.earInner;
+  ctx.fillRect(-9, -38, 3, 10);
+  ctx.fillRect(6, -38, 3, 10);
+  ctx.fillStyle = COLORS.headband;
+  ctx.fillRect(-13, -26, 26, 6);
+  ctx.fillStyle = COLORS.mask;
+  ctx.beginPath();
+  ctx.ellipse(0, -14, 11, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.ellipse(-4, -18, 3.2, 3.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(4, -18, 3.2, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.beginPath();
+  ctx.arc(-4, -18, 1.4, 0, Math.PI * 2);
+  ctx.arc(4, -18, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawWin() {
+  ctx.fillStyle = 'rgba(255,238,248,0.75)';
+  ctx.fillRect(0, 0, W, H);
+  for (const c of confetti) {
+    ctx.fillStyle = c.c;
+    ctx.fillRect(c.x, c.y, c.s, c.s * 0.6);
+  }
+  ctx.fillStyle = COLORS.text;
+  ctx.font = '700 56px Fredoka, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('You Win!', W / 2, 230);
+  ctx.font = '500 22px Fredoka, sans-serif';
+  ctx.fillText('The bunny ninja cleared the course!', W / 2, 275);
+  ctx.fillText('Deaths: ' + deaths + '  ·  Press R to play again', W / 2, 320);
+}
+
+function draw() {
+  const cam = camX();
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#ffe0f0');
+  grad.addColorStop(1, '#ffeef8');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  for (const c of clouds) drawCloud(c, cam);
+  for (const p of petals) drawPetal(p, cam);
+
+  for (const g of gooZones) drawGoo(g, cam);
+  for (const p of staticPlatforms) drawPlatform(p, cam);
+  drawBeam(cam);
+  drawBar(cam);
+  drawDojo(cam);
+  drawFlag(cam);
+
+  if (state !== 'MENU') drawPlayer(cam);
+
+  if (state === 'SWINGING') drawMeter();
+  if (state === 'PLAYING' || state === 'SWINGING' || state === 'DEAD') drawHUD();
+
+  if (state === 'DEAD') {
+    ctx.fillStyle = 'rgba(255,50,80,' + Math.min(0.45, deadTimer) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (state === 'MENU') drawMenu();
+  if (state === 'WIN') drawWin();
+}
+
+let last = performance.now();
+function loop(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.05) dt = 0.05;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
