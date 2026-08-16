@@ -1,9 +1,11 @@
-# Bunny Ninja
+# Bunny Ninja 3D
 
-A cute pastel bunny-eared ninja obstacle course.
+A cute pastel bunny-eared ninja obstacle course in **3D** (Three.js).
 
-Open `index.html` in a browser (or run any static file server).
+Open `index.html` in a browser, or serve the folder with any static file server.
 
-**Controls:** Arrow keys / A D to move · Space / W / Up to jump (and to release the swing bar) · R to restart after winning
+**Controls:** WASD / Arrows move · Space jump (and release the swing) · R restart after winning
 
-**Level 1:** Walk the bounce beam over deadly red goo, then grab the swing bar and release when the gray arrow hits the green circle.
+**Level 1:** Walk the bouncing beam over deadly red goo, grab the swing bar, release when the gray arrow hits the green circle.
+
+**Demo autopilot:** open `index.html?demo=1`
