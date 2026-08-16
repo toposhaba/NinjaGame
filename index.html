@@ -732,10 +732,65 @@ function loop(now) {
   let dt = (now - last) / 1000;
   last = now;
   if (dt > 0.05) dt = 0.05;
+  runDemo(dt);
   update(dt);
   draw();
   requestAnimationFrame(loop);
 }
+
+const DEMO = new URLSearchParams(location.search).has('demo');
+let demoPhase = 'start';
+let demoTimer = 0;
+let demoReleaseArmed = false;
+
+function runDemo(dt) {
+  if (!DEMO) return;
+  demoTimer += dt;
+
+  if (state === 'MENU') {
+    if (demoTimer > 1.0) {
+      spacePressed = true;
+      demoPhase = 'runBeam';
+      demoTimer = 0;
+    }
+    return;
+  }
+
+  if (state === 'WIN' || state === 'DEAD') {
+    keys['ArrowRight'] = false;
+    keys['Space'] = false;
+    if (state === 'DEAD') {
+      demoPhase = 'runBeam';
+      demoReleaseArmed = false;
+    }
+    return;
+  }
+
+  if (state === 'SWINGING') {
+    keys['ArrowRight'] = false;
+    const pos = meterPos(meterT);
+    if (!demoReleaseArmed && Math.abs(pos - 0.5) <= PERFECT_WINDOW * 0.65) {
+      spacePressed = true;
+      demoReleaseArmed = true;
+      demoPhase = 'toGoal';
+    }
+    return;
+  }
+
+  if (state === 'PLAYING') {
+    keys['ArrowRight'] = true;
+
+    if (demoPhase === 'runBeam' && player.x > 1200 && player.onGround) {
+      spacePressed = true;
+      demoPhase = 'toBar';
+    }
+
+    if (demoPhase === 'toBar' && player.x > 1285 && player.onGround) {
+      spacePressed = true;
+    }
+  }
+}
+
 requestAnimationFrame(loop);
 </script>
 </body>
