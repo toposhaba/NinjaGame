@@ -181,51 +181,237 @@ boxMesh(6.4, 1, 12, '#c9b6e4', 0, -0.5, 6);
 boxMesh(6.4, 1, 16.5, '#c9b6e4', 0, -0.5, 37.25);
 boxMesh(9, 1, 23, '#c9b6e4', 0, -0.5, 64.5);
 
-const beam = {
-  mesh: boxMesh(1.25, 0.28, 20, '#8d6e63', 0, 0, 20),
-  minZ: 10, maxZ: 30, halfW: 0.7, baseY: 0, amp: 0.4, period: 2.2,
-};
-beam.mesh.material.color.set('#a1887f');
+const woodMat = new THREE.MeshStandardMaterial({
+  color: '#c4a484', roughness: 0.72, metalness: 0.08,
+});
+const woodDarkMat = new THREE.MeshStandardMaterial({
+  color: '#8d6e63', roughness: 0.8, metalness: 0.05,
+});
+const ropeMat = new THREE.MeshStandardMaterial({
+  color: '#a1887f', roughness: 0.95, metalness: 0.0,
+});
+const metalMat = new THREE.MeshStandardMaterial({
+  color: '#90a4ae', roughness: 0.35, metalness: 0.75,
+});
+const metalDarkMat = new THREE.MeshStandardMaterial({
+  color: '#546e7a', roughness: 0.4, metalness: 0.7,
+});
+
+function makeBounceBeam() {
+  const group = new THREE.Group();
+  group.position.set(0, 0, 20);
+
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.16, 19.6, 1, 1, 24), woodMat.clone());
+  plank.material.color.set('#d7b899');
+  plank.castShadow = true;
+  plank.receiveShadow = true;
+  group.add(plank);
+
+  const topStrip = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.04, 19.5), woodDarkMat.clone());
+  topStrip.material.color.set('#b08968');
+  topStrip.position.y = 0.1;
+  topStrip.castShadow = true;
+  group.add(topStrip);
+
+  for (let i = -9; i <= 9; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.03, 0.12), woodDarkMat);
+    slat.position.set(0, 0.02, i * 1.05);
+    group.add(slat);
+  }
+
+  for (const side of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 19.6), woodDarkMat);
+    rail.position.set(side * 0.58, 0.12, 0);
+    rail.castShadow = true;
+    group.add(rail);
+  }
+
+  for (const z of [-9.7, 9.7]) {
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 1.2, 10), woodDarkMat);
+    cap.rotation.z = Math.PI / 2;
+    cap.position.set(0, 0.02, z);
+    cap.castShadow = true;
+    group.add(cap);
+  }
+
+  const springs = [];
+  for (const z of [-7, -2.5, 2.5, 7]) {
+    const coil = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.18, 0.7, 10, 1, true),
+      metalMat.clone()
+    );
+    coil.material.color.set('#f8bbd0');
+    coil.material.metalness = 0.35;
+    coil.material.roughness = 0.45;
+    coil.position.set(0, -0.45, z);
+    coil.castShadow = true;
+    group.add(coil);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.08, 10), metalDarkMat);
+    base.position.set(0, -0.82, z);
+    group.add(base);
+    springs.push(coil);
+  }
+
+  for (const zEnd of [-10.2, 10.2]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.6, 8), woodDarkMat);
+    post.position.set(0, -0.7, zEnd);
+    post.castShadow = true;
+    scene.add(post);
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.25), metalMat);
+    bracket.position.set(0, 0.05, zEnd * 0.95);
+    group.add(bracket);
+  }
+
+  scene.add(group);
+  return {
+    mesh: group,
+    plank,
+    springs,
+    minZ: 10, maxZ: 30, halfW: 0.7, baseY: 0, amp: 0.4, period: 2.2,
+  };
+}
+const beam = makeBounceBeam();
 
 function makeGoo(z, depth) {
-  const g = new THREE.Mesh(
-    new THREE.BoxGeometry(8, 0.35, depth),
-    new THREE.MeshStandardMaterial({
-      color: '#ff4d6d', transparent: true, opacity: 0.92, roughness: 0.35, metalness: 0.1,
-    })
+  const group = new THREE.Group();
+  const geo = new THREE.PlaneGeometry(8, depth, 24, 18);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({
+    color: '#ff4d6d',
+    transparent: true,
+    opacity: 0.9,
+    roughness: 0.25,
+    metalness: 0.15,
+    emissive: '#7a1028',
+    emissiveIntensity: 0.15,
+  });
+  const surface = new THREE.Mesh(geo, mat);
+  surface.position.set(0, -0.42, z);
+  surface.receiveShadow = true;
+  group.add(surface);
+
+  const pool = new THREE.Mesh(
+    new THREE.BoxGeometry(8.2, 0.5, depth + 0.3),
+    new THREE.MeshStandardMaterial({ color: '#c62828', roughness: 0.6, transparent: true, opacity: 0.85 })
   );
-  g.position.set(0, -0.55, z);
-  g.receiveShadow = true;
-  scene.add(g);
-  const gloss = new THREE.Mesh(
-    new THREE.BoxGeometry(7.2, 0.05, depth * 0.9),
-    new THREE.MeshStandardMaterial({ color: '#ff8fa3', transparent: true, opacity: 0.5 })
-  );
-  gloss.position.set(0, -0.35, z);
-  scene.add(gloss);
-  return { minX: -4, maxX: 4, minZ: z - depth / 2, maxZ: z + depth / 2, y: -0.4 };
+  pool.position.set(0, -0.75, z);
+  group.add(pool);
+
+  const bubbles = [];
+  for (let i = 0; i < 14; i++) {
+    const b = new THREE.Mesh(
+      new THREE.SphereGeometry(0.08 + Math.random() * 0.1, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: '#ff8a9a', transparent: true, opacity: 0.7, roughness: 0.2, metalness: 0.1,
+      })
+    );
+    b.position.set((Math.random() - 0.5) * 6.5, -0.28, z + (Math.random() - 0.5) * (depth - 1));
+    b.userData = { baseY: b.position.y, phase: Math.random() * Math.PI * 2, speed: 1.5 + Math.random() * 2 };
+    group.add(b);
+    bubbles.push(b);
+  }
+  scene.add(group);
+  return {
+    minX: -4, maxX: 4, minZ: z - depth / 2, maxZ: z + depth / 2, y: -0.4,
+    surface, bubbles, positions: surface.geometry.attributes.position,
+  };
 }
 const gooZones = [makeGoo(20, 18), makeGoo(48.8, 6.5)];
 
-const barPivot = new THREE.Group();
-barPivot.position.set(0, 3.8, 47);
-scene.add(barPivot);
-const rope = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.04, 0.04, 1.7, 8),
-  new THREE.MeshStandardMaterial({ color: '#6d4c41' })
-);
-rope.position.y = -0.85;
-barPivot.add(rope);
-const bar = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.08, 0.08, 1.6, 12),
-  new THREE.MeshStandardMaterial({ color: '#5d4037', metalness: 0.3, roughness: 0.4 })
-);
-bar.rotation.z = Math.PI / 2;
-bar.position.y = -1.75;
-barPivot.add(bar);
-const hangHold = new THREE.Object3D();
-hangHold.position.y = -1.75;
-barPivot.add(hangHold);
+function makeSwingSet() {
+  const frame = new THREE.Group();
+  frame.position.set(0, 0, 47);
+  scene.add(frame);
+
+  for (const x of [-2.4, 2.4]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 4.4, 10), woodDarkMat.clone());
+    leg.material.color.set('#6d4c41');
+    leg.position.set(x, 2.0, 0);
+    leg.castShadow = true;
+    frame.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.7), metalDarkMat);
+    foot.position.set(x, 0.06, 0);
+    frame.add(foot);
+  }
+
+  const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 5.2, 12), woodDarkMat.clone());
+  cross.material.color.set('#5d4037');
+  cross.rotation.z = Math.PI / 2;
+  cross.position.set(0, 4.15, 0);
+  cross.castShadow = true;
+  frame.add(cross);
+
+  for (const x of [-2.35, 2.35]) {
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.8), metalMat);
+    brace.position.set(x * 0.55, 3.3, 0);
+    brace.rotation.z = x > 0 ? 0.55 : -0.55;
+    frame.add(brace);
+  }
+
+  const mount = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16), metalMat);
+  mount.rotation.x = Math.PI / 2;
+  mount.position.set(0, 3.95, 0);
+  frame.add(mount);
+
+  const pivot = new THREE.Group();
+  pivot.position.set(0, 3.8, 47);
+  scene.add(pivot);
+
+  const ropeGeo = new THREE.CylinderGeometry(0.035, 0.045, 1.7, 8);
+  const ropeL = new THREE.Mesh(ropeGeo, ropeMat);
+  const ropeR = new THREE.Mesh(ropeGeo.clone(), ropeMat);
+  ropeL.position.set(-0.55, -0.85, 0);
+  ropeR.position.set(0.55, -0.85, 0);
+  ropeL.castShadow = true;
+  ropeR.castShadow = true;
+  pivot.add(ropeL, ropeR);
+
+  for (const x of [-0.55, 0.55]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 6, 12), metalMat);
+    ring.position.set(x, -0.02, 0);
+    pivot.add(ring);
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), ropeMat);
+    knot.position.set(x, -1.68, 0);
+    pivot.add(knot);
+  }
+
+  const barGroup = new THREE.Group();
+  barGroup.position.y = -1.75;
+  pivot.add(barGroup);
+
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.07, 1.7, 14),
+    new THREE.MeshStandardMaterial({ color: '#4e342e', roughness: 0.55, metalness: 0.25 })
+  );
+  grip.rotation.z = Math.PI / 2;
+  grip.castShadow = true;
+  barGroup.add(grip);
+
+  for (const x of [-0.55, 0, 0.55]) {
+    const wrap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.085, 0.085, 0.22, 12),
+      new THREE.MeshStandardMaterial({ color: '#ffb3d1', roughness: 0.85, metalness: 0.05 })
+    );
+    wrap.rotation.z = Math.PI / 2;
+    wrap.position.x = x;
+    barGroup.add(wrap);
+  }
+
+  for (const x of [-0.9, 0.9]) {
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 10), metalDarkMat);
+    tip.position.x = x;
+    barGroup.add(tip);
+  }
+
+  const hold = new THREE.Object3D();
+  hold.position.y = -1.75;
+  pivot.add(hold);
+
+  return { pivot, frame, ropeL, ropeR, barGroup, hangHold: hold };
+}
+const swing = makeSwingSet();
+const barPivot = swing.pivot;
+const hangHold = swing.hangHold;
 
 boxMesh(0.35, 3.2, 0.35, '#8d6e63', -2.2, 1.1, 64);
 boxMesh(0.35, 3.2, 0.35, '#8d6e63', 2.2, 1.1, 64);
@@ -513,6 +699,39 @@ function update(dt) {
   updateDemo(dt);
 
   beam.mesh.position.y = beamY(time);
+  const bounce = Math.sin((time / beam.period) * Math.PI * 2);
+  const squash = 1 + bounce * 0.08;
+  for (const coil of beam.springs) {
+    coil.scale.y = Math.max(0.55, 1 - bounce * 0.28);
+    coil.position.y = -0.45 - (1 - coil.scale.y) * 0.2;
+  }
+  beam.plank.scale.y = squash;
+
+  for (const g of gooZones) {
+    const pos = g.positions;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const wave = Math.sin(time * 2.4 + x * 1.3 + z * 0.9) * 0.07
+        + Math.sin(time * 3.1 + x * 0.6 - z * 1.1) * 0.04;
+      pos.setY(i, wave);
+    }
+    pos.needsUpdate = true;
+    g.surface.geometry.computeVertexNormals();
+    for (const b of g.bubbles) {
+      b.position.y = b.userData.baseY + Math.sin(time * b.userData.speed + b.userData.phase) * 0.12;
+    }
+  }
+
+  if (state === 'SWINGING') {
+    const stretch = 1 + Math.abs(Math.sin(time * 2.4)) * 0.04;
+    swing.ropeL.scale.y = stretch;
+    swing.ropeR.scale.y = stretch;
+  } else {
+    swing.ropeL.scale.y = 1;
+    swing.ropeR.scale.y = 1;
+  }
+
   flagCloth.position.x = 0.75 + Math.sin(time * 4) * 0.08;
 
   for (const p of petals) {
