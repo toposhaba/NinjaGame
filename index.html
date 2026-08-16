@@ -128,6 +128,8 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#ffd6ec');
@@ -150,14 +152,17 @@ sun.shadow.camera.top = 40;
 sun.shadow.camera.bottom = -10;
 scene.add(sun);
 
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(40, 120),
-  new THREE.MeshStandardMaterial({ color: '#f3e0ef', roughness: 1 })
-);
-ground.rotation.x = -Math.PI / 2;
-ground.position.set(0, -0.02, 35);
-ground.receiveShadow = true;
-scene.add(ground);
+const groundMat = new THREE.MeshStandardMaterial({ color: '#f3e0ef', roughness: 1 });
+function addGroundPatch(w, d, x, z) {
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(w, d), groundMat);
+  g.rotation.x = -Math.PI / 2;
+  g.position.set(x, -0.02, z);
+  g.receiveShadow = true;
+  scene.add(g);
+}
+addGroundPatch(14, 14, 0, 5);
+addGroundPatch(14, 18, 0, 37);
+addGroundPatch(16, 26, 0, 64);
 
 function boxMesh(w, h, d, color, x, y, z) {
   const m = new THREE.Mesh(
@@ -200,65 +205,94 @@ const metalDarkMat = new THREE.MeshStandardMaterial({
 function makeBounceBeam() {
   const group = new THREE.Group();
   group.position.set(0, 0, 20);
+  group.frustumCulled = false;
 
-  const plank = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.16, 19.6, 1, 1, 24), woodMat.clone());
-  plank.material.color.set('#d7b899');
+  const plank = new THREE.Mesh(
+    new THREE.BoxGeometry(1.35, 0.22, 19.6),
+    new THREE.MeshStandardMaterial({ color: '#e0c3a0', roughness: 0.65, metalness: 0.05, emissive: '#4a3020', emissiveIntensity: 0.05 })
+  );
   plank.castShadow = true;
   plank.receiveShadow = true;
+  plank.frustumCulled = false;
   group.add(plank);
 
-  const topStrip = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.04, 19.5), woodDarkMat.clone());
-  topStrip.material.color.set('#b08968');
-  topStrip.position.y = 0.1;
+  const topStrip = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 0.05, 19.5),
+    new THREE.MeshStandardMaterial({ color: '#b08968', roughness: 0.7 })
+  );
+  topStrip.position.y = 0.13;
   topStrip.castShadow = true;
+  topStrip.frustumCulled = false;
   group.add(topStrip);
 
   for (let i = -9; i <= 9; i++) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.03, 0.12), woodDarkMat);
-    slat.position.set(0, 0.02, i * 1.05);
+    const slat = new THREE.Mesh(
+      new THREE.BoxGeometry(1.38, 0.04, 0.14),
+      new THREE.MeshStandardMaterial({ color: '#8d6e63', roughness: 0.8 })
+    );
+    slat.position.set(0, 0.03, i * 1.05);
+    slat.frustumCulled = false;
     group.add(slat);
   }
 
   for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 19.6), woodDarkMat);
-    rail.position.set(side * 0.58, 0.12, 0);
+    const rail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.16, 19.6),
+      new THREE.MeshStandardMaterial({ color: '#6d4c41', roughness: 0.75 })
+    );
+    rail.position.set(side * 0.68, 0.16, 0);
     rail.castShadow = true;
+    rail.frustumCulled = false;
     group.add(rail);
   }
 
   for (const z of [-9.7, 9.7]) {
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 1.2, 10), woodDarkMat);
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.16, 1.4, 12),
+      new THREE.MeshStandardMaterial({ color: '#5d4037', roughness: 0.7 })
+    );
     cap.rotation.z = Math.PI / 2;
-    cap.position.set(0, 0.02, z);
+    cap.position.set(0, 0.04, z);
     cap.castShadow = true;
+    cap.frustumCulled = false;
     group.add(cap);
   }
 
   const springs = [];
   for (const z of [-7, -2.5, 2.5, 7]) {
     const coil = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.18, 0.7, 10, 1, true),
-      metalMat.clone()
+      new THREE.CylinderGeometry(0.18, 0.2, 0.85, 12),
+      new THREE.MeshStandardMaterial({ color: '#f8bbd0', metalness: 0.35, roughness: 0.4, emissive: '#c2185b', emissiveIntensity: 0.08 })
     );
-    coil.material.color.set('#f8bbd0');
-    coil.material.metalness = 0.35;
-    coil.material.roughness = 0.45;
-    coil.position.set(0, -0.45, z);
+    coil.position.set(0, -0.5, z);
     coil.castShadow = true;
+    coil.frustumCulled = false;
     group.add(coil);
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.08, 10), metalDarkMat);
-    base.position.set(0, -0.82, z);
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.26, 0.28, 0.1, 12),
+      new THREE.MeshStandardMaterial({ color: '#546e7a', metalness: 0.6, roughness: 0.4 })
+    );
+    base.position.set(0, -0.95, z);
+    base.frustumCulled = false;
     group.add(base);
     springs.push(coil);
   }
 
   for (const zEnd of [-10.2, 10.2]) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.6, 8), woodDarkMat);
-    post.position.set(0, -0.7, zEnd);
+    const post = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.11, 0.13, 1.5, 10),
+      new THREE.MeshStandardMaterial({ color: '#5d4037', roughness: 0.75 })
+    );
+    post.position.set(0, -0.75, zEnd);
     post.castShadow = true;
-    scene.add(post);
-    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.25), metalMat);
-    bracket.position.set(0, 0.05, zEnd * 0.95);
+    post.frustumCulled = false;
+    group.add(post);
+    const bracket = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.12, 0.3),
+      new THREE.MeshStandardMaterial({ color: '#90a4ae', metalness: 0.7, roughness: 0.35 })
+    );
+    bracket.position.set(0, 0.08, zEnd * 0.96);
+    bracket.frustumCulled = false;
     group.add(bracket);
   }
 
@@ -267,7 +301,7 @@ function makeBounceBeam() {
     mesh: group,
     plank,
     springs,
-    minZ: 10, maxZ: 30, halfW: 0.7, baseY: 0, amp: 0.4, period: 2.2,
+    minZ: 10, maxZ: 30, halfW: 0.75, baseY: 0, amp: 0.4, period: 2.2,
   };
 }
 const beam = makeBounceBeam();
@@ -286,15 +320,17 @@ function makeGoo(z, depth) {
     emissiveIntensity: 0.15,
   });
   const surface = new THREE.Mesh(geo, mat);
-  surface.position.set(0, -0.42, z);
+  surface.position.set(0, -0.15, z);
   surface.receiveShadow = true;
+  surface.frustumCulled = false;
   group.add(surface);
 
   const pool = new THREE.Mesh(
-    new THREE.BoxGeometry(8.2, 0.5, depth + 0.3),
-    new THREE.MeshStandardMaterial({ color: '#c62828', roughness: 0.6, transparent: true, opacity: 0.85 })
+    new THREE.BoxGeometry(8.2, 0.55, depth + 0.3),
+    new THREE.MeshStandardMaterial({ color: '#c62828', roughness: 0.55, transparent: true, opacity: 0.9 })
   );
-  pool.position.set(0, -0.75, z);
+  pool.position.set(0, -0.5, z);
+  pool.frustumCulled = false;
   group.add(pool);
 
   const bubbles = [];
@@ -321,90 +357,117 @@ const gooZones = [makeGoo(20, 18), makeGoo(48.8, 6.5)];
 function makeSwingSet() {
   const frame = new THREE.Group();
   frame.position.set(0, 0, 47);
+  frame.frustumCulled = false;
   scene.add(frame);
 
-  for (const x of [-2.4, 2.4]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 4.4, 10), woodDarkMat.clone());
-    leg.material.color.set('#6d4c41');
-    leg.position.set(x, 2.0, 0);
+  for (const x of [-2.6, 2.6]) {
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.18, 4.5, 12),
+      new THREE.MeshStandardMaterial({ color: '#5d4037', roughness: 0.7 })
+    );
+    leg.position.set(x, 2.05, 0);
     leg.castShadow = true;
+    leg.frustumCulled = false;
     frame.add(leg);
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.7), metalDarkMat);
-    foot.position.set(x, 0.06, 0);
+    const foot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.65, 0.14, 0.8),
+      new THREE.MeshStandardMaterial({ color: '#455a64', metalness: 0.6, roughness: 0.4 })
+    );
+    foot.position.set(x, 0.07, 0);
+    foot.frustumCulled = false;
     frame.add(foot);
   }
 
-  const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 5.2, 12), woodDarkMat.clone());
-  cross.material.color.set('#5d4037');
+  const cross = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.13, 0.13, 5.6, 14),
+    new THREE.MeshStandardMaterial({ color: '#4e342e', roughness: 0.65 })
+  );
   cross.rotation.z = Math.PI / 2;
-  cross.position.set(0, 4.15, 0);
+  cross.position.set(0, 4.2, 0);
   cross.castShadow = true;
+  cross.frustumCulled = false;
   frame.add(cross);
 
-  for (const x of [-2.35, 2.35]) {
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.8), metalMat);
-    brace.position.set(x * 0.55, 3.3, 0);
-    brace.rotation.z = x > 0 ? 0.55 : -0.55;
-    frame.add(brace);
-  }
-
-  const mount = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16), metalMat);
+  const mount = new THREE.Mesh(
+    new THREE.TorusGeometry(0.22, 0.05, 10, 20),
+    new THREE.MeshStandardMaterial({ color: '#90a4ae', metalness: 0.75, roughness: 0.35 })
+  );
   mount.rotation.x = Math.PI / 2;
-  mount.position.set(0, 3.95, 0);
+  mount.position.set(0, 4.0, 0);
+  mount.frustumCulled = false;
   frame.add(mount);
 
   const pivot = new THREE.Group();
-  pivot.position.set(0, 3.8, 47);
+  pivot.position.set(0, 3.85, 47);
+  pivot.frustumCulled = false;
   scene.add(pivot);
 
-  const ropeGeo = new THREE.CylinderGeometry(0.035, 0.045, 1.7, 8);
-  const ropeL = new THREE.Mesh(ropeGeo, ropeMat);
-  const ropeR = new THREE.Mesh(ropeGeo.clone(), ropeMat);
-  ropeL.position.set(-0.55, -0.85, 0);
-  ropeR.position.set(0.55, -0.85, 0);
+  const ropeMatLocal = new THREE.MeshStandardMaterial({ color: '#a1887f', roughness: 0.95 });
+  const ropeL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.85, 10), ropeMatLocal);
+  const ropeR = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.85, 10), ropeMatLocal.clone());
+  ropeL.position.set(-0.6, -0.92, 0);
+  ropeR.position.set(0.6, -0.92, 0);
   ropeL.castShadow = true;
   ropeR.castShadow = true;
+  ropeL.frustumCulled = false;
+  ropeR.frustumCulled = false;
   pivot.add(ropeL, ropeR);
 
-  for (const x of [-0.55, 0.55]) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 6, 12), metalMat);
+  for (const x of [-0.6, 0.6]) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.08, 0.025, 8, 14),
+      new THREE.MeshStandardMaterial({ color: '#cfd8dc', metalness: 0.8, roughness: 0.3 })
+    );
     ring.position.set(x, -0.02, 0);
+    ring.frustumCulled = false;
     pivot.add(ring);
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), ropeMat);
-    knot.position.set(x, -1.68, 0);
+    const knot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07, 10, 10),
+      ropeMatLocal.clone()
+    );
+    knot.position.set(x, -1.82, 0);
+    knot.frustumCulled = false;
     pivot.add(knot);
   }
 
   const barGroup = new THREE.Group();
-  barGroup.position.y = -1.75;
+  barGroup.position.y = -1.85;
+  barGroup.frustumCulled = false;
   pivot.add(barGroup);
 
   const grip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07, 0.07, 1.7, 14),
-    new THREE.MeshStandardMaterial({ color: '#4e342e', roughness: 0.55, metalness: 0.25 })
+    new THREE.CylinderGeometry(0.1, 0.1, 1.9, 16),
+    new THREE.MeshStandardMaterial({ color: '#3e2723', roughness: 0.45, metalness: 0.35 })
   );
   grip.rotation.z = Math.PI / 2;
   grip.castShadow = true;
+  grip.frustumCulled = false;
   barGroup.add(grip);
 
-  for (const x of [-0.55, 0, 0.55]) {
+  for (const x of [-0.65, -0.2, 0.2, 0.65]) {
     const wrap = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.085, 0.085, 0.22, 12),
-      new THREE.MeshStandardMaterial({ color: '#ffb3d1', roughness: 0.85, metalness: 0.05 })
+      new THREE.CylinderGeometry(0.12, 0.12, 0.28, 14),
+      new THREE.MeshStandardMaterial({ color: '#ff8fb8', roughness: 0.8, emissive: '#c2185b', emissiveIntensity: 0.12 })
     );
     wrap.rotation.z = Math.PI / 2;
     wrap.position.x = x;
+    wrap.frustumCulled = false;
     barGroup.add(wrap);
   }
 
-  for (const x of [-0.9, 0.9]) {
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 10), metalDarkMat);
+  for (const x of [-1.0, 1.0]) {
+    const tip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 12, 12),
+      new THREE.MeshStandardMaterial({ color: '#78909c', metalness: 0.7, roughness: 0.35 })
+    );
     tip.position.x = x;
+    tip.frustumCulled = false;
     barGroup.add(tip);
   }
 
   const hold = new THREE.Object3D();
-  hold.position.y = -1.75;
+  hold.position.y = -1.85;
+  hold.frustumCulled = false;
   pivot.add(hold);
 
   return { pivot, frame, ropeL, ropeR, barGroup, hangHold: hold };
@@ -436,6 +499,7 @@ for (let i = 0; i < 40; i++) {
 
 function makePlayer() {
   const root = new THREE.Group();
+  root.frustumCulled = false;
   const skin = '#ffe0cc';
   const pink = '#ffb3d1';
   const pinkD = '#f48fb1';
@@ -447,6 +511,7 @@ function makePlayer() {
   );
   body.position.y = 0.7;
   body.castShadow = true;
+  body.frustumCulled = false;
   root.add(body);
 
   const head = new THREE.Mesh(
@@ -455,6 +520,7 @@ function makePlayer() {
   );
   head.position.y = 1.25;
   head.castShadow = true;
+  head.frustumCulled = false;
   root.add(head);
 
   const maskM = new THREE.Mesh(
@@ -462,6 +528,7 @@ function makePlayer() {
     new THREE.MeshStandardMaterial({ color: mask, roughness: 0.6 })
   );
   maskM.position.set(0, 1.18, 0.02);
+  maskM.frustumCulled = false;
   root.add(maskM);
 
   const band = new THREE.Mesh(
@@ -470,6 +537,7 @@ function makePlayer() {
   );
   band.rotation.x = Math.PI / 2;
   band.position.y = 1.34;
+  band.frustumCulled = false;
   root.add(band);
 
   for (const sx of [-1, 1]) {
@@ -479,12 +547,14 @@ function makePlayer() {
     );
     ear.position.set(sx * 0.14, 1.62, -0.02);
     ear.castShadow = true;
+    ear.frustumCulled = false;
     root.add(ear);
     const inner = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.03, 0.18, 4, 6),
       new THREE.MeshStandardMaterial({ color: pink })
     );
     inner.position.set(sx * 0.14, 1.62, 0.02);
+    inner.frustumCulled = false;
     root.add(inner);
   }
 
@@ -492,11 +562,15 @@ function makePlayer() {
   const eyeR = eyeL.clone();
   eyeL.position.set(-0.09, 1.28, 0.22);
   eyeR.position.set(0.09, 1.28, 0.22);
+  eyeL.frustumCulled = false;
+  eyeR.frustumCulled = false;
   root.add(eyeL, eyeR);
   const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), new THREE.MeshStandardMaterial({ color: '#333' }));
   const pupilR = pupilL.clone();
   pupilL.position.set(-0.09, 1.28, 0.26);
   pupilR.position.set(0.09, 1.28, 0.26);
+  pupilL.frustumCulled = false;
+  pupilR.frustumCulled = false;
   root.add(pupilL, pupilR);
 
   const katana = new THREE.Mesh(
@@ -505,16 +579,30 @@ function makePlayer() {
   );
   katana.position.set(-0.32, 0.85, -0.05);
   katana.rotation.z = 0.25;
+  katana.frustumCulled = false;
   root.add(katana);
+
+  const armL = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.06, 0.28, 4, 8),
+    new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 })
+  );
+  const armR = armL.clone();
+  armL.position.set(-0.34, 0.85, 0.05);
+  armR.position.set(0.34, 0.85, 0.05);
+  armL.frustumCulled = false;
+  armR.frustumCulled = false;
+  root.add(armL, armR);
 
   const legL = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.18, 4, 8), new THREE.MeshStandardMaterial({ color: pinkD }));
   const legR = legL.clone();
   legL.position.set(-0.12, 0.25, 0);
   legR.position.set(0.12, 0.25, 0);
+  legL.frustumCulled = false;
+  legR.frustumCulled = false;
   root.add(legL, legR);
 
   scene.add(root);
-  return { root, legL, legR };
+  return { root, legL, legR, armL, armR };
 }
 
 const playerMesh = makePlayer();
@@ -557,6 +645,10 @@ function resetPlayer() {
   }
   playerMesh.root.position.set(player.x, player.y, player.z);
   playerMesh.root.rotation.set(0, 0, 0);
+  playerMesh.armL.rotation.set(0, 0, 0);
+  playerMesh.armR.rotation.set(0, 0, 0);
+  playerMesh.armL.position.set(-0.34, 0.85, 0.05);
+  playerMesh.armR.position.set(0.34, 0.85, 0.05);
 }
 
 function showMenu() {
@@ -700,12 +792,10 @@ function update(dt) {
 
   beam.mesh.position.y = beamY(time);
   const bounce = Math.sin((time / beam.period) * Math.PI * 2);
-  const squash = 1 + bounce * 0.08;
   for (const coil of beam.springs) {
     coil.scale.y = Math.max(0.55, 1 - bounce * 0.28);
-    coil.position.y = -0.45 - (1 - coil.scale.y) * 0.2;
+    coil.position.y = -0.5 - (1 - coil.scale.y) * 0.22;
   }
-  beam.plank.scale.y = squash;
 
   for (const g of gooZones) {
     const pos = g.positions;
@@ -800,6 +890,11 @@ function update(dt) {
       player.y = Math.max(0.4, wp.y - 0.15);
       player.z = wp.z;
       playerMesh.root.position.set(player.x, player.y, player.z);
+      playerMesh.root.rotation.set(0, 0, 0);
+      playerMesh.armL.rotation.set(0, 0, 0);
+      playerMesh.armR.rotation.set(0, 0, 0);
+      playerMesh.armL.position.set(-0.34, 0.85, 0.05);
+      playerMesh.armR.position.set(0.34, 0.85, 0.05);
       state = 'PLAYING';
       meterEl.style.display = 'none';
       barPivot.rotation.x = 0;
@@ -868,7 +963,7 @@ function update(dt) {
 
     if (inGoo()) kill();
 
-    const hangY = barPivot.position.y - 1.75;
+    const hangY = barPivot.position.y - 1.85;
     const dx = player.x - barPivot.position.x;
     const dz = player.z - barPivot.position.z;
     const planar = Math.hypot(dx, dz);
@@ -886,8 +981,16 @@ function update(dt) {
       player.vx = player.vy = player.vz = 0;
       scene.remove(playerMesh.root);
       hangHold.add(playerMesh.root);
-      playerMesh.root.position.set(0, -0.85, 0);
-      playerMesh.root.rotation.set(0, 0, 0);
+      playerMesh.root.visible = true;
+      playerMesh.root.frustumCulled = false;
+      playerMesh.root.traverse((o) => { o.frustumCulled = false; o.visible = true; });
+      playerMesh.root.position.set(0, -1.35, 0);
+      playerMesh.root.rotation.set(0.2, 0, 0);
+      playerMesh.armL.rotation.z = 2.4;
+      playerMesh.armR.rotation.z = -2.4;
+      playerMesh.armL.position.set(-0.2, 1.35, 0.1);
+      playerMesh.armR.position.set(0.2, 1.35, 0.1);
+      hangHold.updateMatrixWorld(true);
     }
 
     if (player.x > flagHit.minX && player.x < flagHit.maxX &&
@@ -909,11 +1012,17 @@ function update(dt) {
 
 const camPos = new THREE.Vector3(0, 5, -4);
 const camTarget = new THREE.Vector3();
+const _hangWorld = new THREE.Vector3();
 function updateCamera(dt) {
-  const focus = state === 'SWINGING'
-    ? new THREE.Vector3(barPivot.position.x, 2.2, barPivot.position.z)
-    : new THREE.Vector3(player.x, player.y + 1.2, player.z);
-  const desired = focus.clone().add(new THREE.Vector3(0, 4.2, -8.5));
+  let focus;
+  if (state === 'SWINGING') {
+    hangHold.getWorldPosition(_hangWorld);
+    focus = _hangWorld.clone();
+    focus.y -= 0.4;
+  } else {
+    focus = new THREE.Vector3(player.x, player.y + 1.2, player.z);
+  }
+  const desired = focus.clone().add(new THREE.Vector3(0, 3.6, -9.2));
   camPos.lerp(desired, 1 - Math.pow(0.001, dt));
   camTarget.lerp(focus, 1 - Math.pow(0.001, dt));
   camera.position.copy(camPos);
