@@ -63,9 +63,9 @@ const ROPE_LEN = 130;
 const SWING_AMP = 75 * Math.PI / 180;
 const SWING_SPEED = 2.5;
 const METER_PERIOD = 1.6;
-const PERFECT_WINDOW = 0.1;
-const WIN_VX = 820, WIN_VY = -700;
-const FAIL_VX = 140, FAIL_VY = -180;
+const PERFECT_WINDOW = 0.12;
+const WIN_VX = 480, WIN_VY = -620;
+const FAIL_VX = 100, FAIL_VY = -140;
 
 const keys = {};
 let spacePressed = false;
@@ -103,18 +103,18 @@ const player = {
 };
 
 const staticPlatforms = [
-  { x: 0, y: 450, w: 300, h: 90 },
-  { x: 1040, y: 450, w: 260, h: 90 },
-  { x: 1950, y: 450, w: 280, h: 90 },
+  { x: 0, y: 450, w: 340, h: 90 },
+  { x: 980, y: 450, w: 340, h: 90 },
+  { x: 1620, y: 450, w: 680, h: 90 },
 ];
 
-const beam = { x: 340, w: 660, h: 14, baseY: 430, amp: 25, period: 2 };
-const bar = { x: 1380, y: 290, w: 56, h: 10 };
-const flag = { x: 2080, y: 360, w: 18, h: 90 };
-const dojo = { x: 2000, y: 370, w: 140, h: 80 };
+const beam = { x: 320, w: 680, h: 14, baseY: 450, amp: 20, period: 2.2 };
+const bar = { x: 1420, y: 300, w: 60, h: 12 };
+const flag = { x: 1980, y: 360, w: 18, h: 90 };
+const dojo = { x: 1900, y: 370, w: 140, h: 80 };
 const gooZones = [
-  { x: 300, y: 500, w: 740, h: 80 },
-  { x: 1300, y: 500, w: 650, h: 80 },
+  { x: 330, y: 520, w: 660, h: 80 },
+  { x: 1320, y: 520, w: 300, h: 80 },
 ];
 
 function beamY(t) {
@@ -253,6 +253,9 @@ function update(dt) {
       const perfect = Math.abs(pos - 0.5) <= PERFECT_WINDOW;
       state = 'PLAYING';
       if (perfect) {
+        const launchAng = 0.7;
+        player.x = bar.x + bar.w / 2 + Math.sin(launchAng) * ROPE_LEN - HIT_W / 2;
+        player.y = bar.y + Math.cos(launchAng) * ROPE_LEN;
         player.vx = WIN_VX;
         player.vy = WIN_VY;
       } else {
@@ -294,27 +297,26 @@ function update(dt) {
     player.ridingBeam = false;
 
     const by = beamY(time);
-    const beamPlat = { x: beam.x, y: by, w: beam.w, h: beam.h };
     const pr = playerRect();
-
-    if (player.vy >= 0 &&
-        pr.x + pr.w > beamPlat.x && pr.x < beamPlat.x + beamPlat.w &&
-        pr.y + pr.h >= beamPlat.y && pr.y + pr.h <= beamPlat.y + beamPlat.h + 16 &&
-        player.y + HIT_H - player.vy * dt <= beamPlat.y + 4) {
-      player.y = beamPlat.y - HIT_H;
-      player.vy = 0;
-      player.onGround = true;
-      player.ridingBeam = true;
-      const nextBy = beamY(time + dt);
-      player.y += (nextBy - by);
+    const onBeamX = pr.x + pr.w > beam.x + 2 && pr.x < beam.x + beam.w - 2;
+    if (onBeamX && player.vy >= -40) {
+      const feet = player.y + HIT_H;
+      if (feet >= by - 6 && feet <= by + 22) {
+        player.y = by - HIT_H;
+        player.vy = 0;
+        player.onGround = true;
+        player.ridingBeam = true;
+        const nextBy = beamY(time + dt);
+        player.y += (nextBy - by);
+      }
     }
 
     for (const p of staticPlatforms) {
+      if (player.ridingBeam) break;
       const pr2 = playerRect();
-      if (player.vy >= 0 &&
+      if (player.vy >= -40 &&
           pr2.x + pr2.w > p.x && pr2.x < p.x + p.w &&
-          pr2.y + pr2.h >= p.y && pr2.y + pr2.h <= p.y + 18 &&
-          player.y + HIT_H - player.vy * dt <= p.y + 4) {
+          pr2.y + pr2.h >= p.y - 2 && pr2.y + pr2.h <= p.y + 20) {
         player.y = p.y - HIT_H;
         player.vy = 0;
         player.onGround = true;
@@ -325,21 +327,21 @@ function update(dt) {
     if (player.x + HIT_W > 2400) player.x = 2400 - HIT_W;
 
     for (const g of gooZones) {
-      if (rectsOverlap(playerRect(), g)) {
+      const body = { x: player.x + 4, y: player.y + HIT_H * 0.55, w: HIT_W - 8, h: HIT_H * 0.4 };
+      if (rectsOverlap(body, g)) {
         kill();
         break;
       }
     }
     if (player.y > H + 40) kill();
 
-    const grab = {
-      x: player.x - 6,
-      y: player.y - 8,
-      w: HIT_W + 12,
-      h: 28,
-    };
-    const barGrab = { x: bar.x - 8, y: bar.y - 8, w: bar.w + 16, h: bar.h + 16 };
-    if (!player.onGround && player.vy <= 120 && rectsOverlap(grab, barGrab)) {
+    const barCx = bar.x + bar.w / 2;
+    const nearBar =
+      !player.onGround &&
+      Math.abs(player.x + HIT_W / 2 - barCx) < 70 &&
+      player.y < bar.y + 85 &&
+      player.y > bar.y - 100;
+    if (nearBar) {
       state = 'SWINGING';
       meterT = 0;
       player.vx = 0;
@@ -769,7 +771,8 @@ function runDemo(dt) {
   if (state === 'SWINGING') {
     keys['ArrowRight'] = false;
     const pos = meterPos(meterT);
-    if (!demoReleaseArmed && Math.abs(pos - 0.5) <= PERFECT_WINDOW * 0.65) {
+    const angle = Math.sin(time * SWING_SPEED) * SWING_AMP;
+    if (!demoReleaseArmed && angle > 0.55 && Math.abs(pos - 0.5) <= PERFECT_WINDOW * 0.85) {
       spacePressed = true;
       demoReleaseArmed = true;
       demoPhase = 'toGoal';
@@ -780,12 +783,10 @@ function runDemo(dt) {
   if (state === 'PLAYING') {
     keys['ArrowRight'] = true;
 
-    if (demoPhase === 'runBeam' && player.x > 1200 && player.onGround) {
+    if (demoPhase === 'runBeam' && player.x > 1180 && player.onGround) {
       spacePressed = true;
       demoPhase = 'toBar';
-    }
-
-    if (demoPhase === 'toBar' && player.x > 1285 && player.onGround) {
+    } else if (demoPhase === 'toBar' && player.x > 1260 && player.onGround) {
       spacePressed = true;
     }
   }
